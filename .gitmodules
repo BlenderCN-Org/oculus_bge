@@ -1,0 +1,3 @@
+[submodule "head_mounted_display/libs/hmd_sdk_bridge"]
+	path = head_mounted_display/libs/hmd_sdk_bridge
+	url = https://github.com/dfelinto/hmd_sdk_bridge_build.git
