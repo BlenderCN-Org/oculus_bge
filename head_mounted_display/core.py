@@ -4,54 +4,176 @@ from bgl import *
 
 
 VERBOSE = True
+DEBUG = True
 
 
 def init():
+    """
+    called from logic brick
+    """
     if not hasattr(logic, 'setRender'):
-        print("You require a patched Blender with bge.logic.setRender() method")
-        logic.endGame()
-
-    logic._hmd = HMD('oculus_legacy')
-    logic._hmd.start()
+        print("ERROR: You require a patched Blender with bge.logic.setRender() method")
+        return logic.endGame()
 
     scene = logic.getCurrentScene()
-    scene.post_draw.append(draw)
+    camera = scene.objects.get('Camera.VR')
+
+    if not camera:
+        print("ERROR: Missing special Camera.VR object")
+        return logic.endGame()
+
+    backend = camera['backend']
+    mirror = camera['mirror']
+
+    hmd = HMD(backend, mirror)
+
+    if not hmd.start():
+        return logic.endGame()
+
+    logic.globalDict['hmd'] = hmd
 
 
 def loop():
-    #logic._hmd.loop()
-    #draw()
-    pass
-
-
-def draw():
     """
-    from bge import render
-    import bgl
-    import blf
-
-    width = render.getWindowWidth()
-    height = render.getWindowHeight()
-
-    # OpenGL setup
-    bgl.glMatrixMode(bgl.GL_PROJECTION)
-    bgl.glLoadIdentity()
-    bgl.gluOrtho2D(0, width, 0, height)
-    bgl.glMatrixMode(bgl.GL_MODELVIEW)
-    bgl.glLoadIdentity()
-
-    # BLF fun
-    font_id = 0
-    blf.position(font_id, (width*0.2), (height*0.3), 0)
-    blf.size(font_id, 50, 72)
-    blf.draw(font_id, "Hello World")
+    called from logic brick
     """
-    logic._hmd.loop()
-    texture_a = logic._hmd._hmd._color_texture[0]
-    texture_b = logic._hmd._hmd._color_texture[1]
+    hmd = logic.globalDict.get('hmd')
+    if hmd:
+        hmd.loop()
 
-    drawPreview(texture_a, texture_b, 50)
 
+def recenter():
+    """
+    called from logic brick
+    """
+    hmd = logic.globalDict.get('hmd')
+    if hmd:
+        hmd.reCenter()
+
+
+# #####################################
+# Main Class
+# #####################################
+
+class Logger:
+    def error(self, message, is_fatal):
+        print(message)
+
+        if is_fatal:
+            logic.endGame()
+
+    @staticmethod
+    def log_traceback(err):
+        raise err
+        print(err)
+        logic.endGame()
+
+
+class HMD:
+    def __init__(self, backend, mirror):
+        self._hmd = None
+        self._backend = backend
+        self._mirror = mirror
+        self.logger = Logger()
+        self._checkLibraryPath()
+
+    @property
+    def use_mirror(self):
+        return self._mirror and self._hmd.is_direct_mode
+
+    def reCenter(self):
+        return self._hmd.reCenter()
+
+    def start(self):
+        try:
+            scene = logic.getCurrentScene()
+            self._hmd = self._getHMDClass()(scene, self.logger.error)
+
+            if not self._hmd.init():
+                self.logger.error("Error initializing device", True)
+                return False
+
+        except Exception as E:
+            self.logger.log_traceback(E)
+            self._hmd = None
+            return False
+
+        else:
+            if self.use_mirror:
+                if self._drawMirror not in scene.post_draw:
+                    scene.post_draw.append(self._drawMirror)
+
+                logic.setRender(True)
+            else:
+                logic.setRender(False)
+
+            return True
+
+    def loop(self):
+        self._hmd.loop()
+
+        scene = logic.getCurrentScene()
+        camera = scene.objects.get('Camera.VR')
+
+        for i in range(2):
+            self._hmd.setEye(i)
+
+            offscreen = self._hmd.offscreen
+            projection_matrix = self._hmd.projection_matrix
+            modelview_matrix = self._hmd.modelview_matrix
+
+            self._setMatrices(camera, projection_matrix, modelview_matrix)
+
+            # drawing
+            self._hmd.image_render.refresh(self._hmd.texture_buffer)
+
+        self._hmd.frameReady()
+
+    def _drawMirror(self):
+        texture_a = self._hmd._color_texture[0]
+        texture_b = self._hmd._color_texture[1]
+        drawPreview(texture_a, texture_b)
+
+    def _checkLibraryPath(self):
+        """if library exists append it to sys.path"""
+        import sys
+        import os
+
+        libs_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'libs')
+        oculus_path = os.path.join(libs_path, "hmd_sdk_bridge")
+
+        if oculus_path not in sys.path:
+            sys.path.append(oculus_path)
+
+    def _getHMDClass(self):
+        if self._backend == 'oculus_latest':
+            return BridgeOculus
+
+        elif self._backend == 'oculus_legacy':
+            return BridgeOculusLegacy
+
+        else:
+            self.logger.error('Oculus backend \"{0}\" not supported'.format(self._backend), True)
+            return None
+
+    def _checkOculus(self):
+        """
+        check if Oculus is connected
+        """
+        # TODO check is oculus is connected
+        return True
+
+    def _setMatrices(self, camera, projection_matrix, modelview_matrix):
+        camera.projection_matrix = projection_matrix
+
+        modelview_matrix.invert()
+        camera.worldPosition = modelview_matrix.translation
+        camera.worldOrientation = modelview_matrix.to_quaternion()
+
+
+# #####################################
+# OpenGL
+# #####################################
 
 def drawRectangle(eye):
     texco = [(1, 1), (0, 1), (0, 0), (1,0)]
@@ -98,22 +220,9 @@ def view_reset():
     glPopMatrix()
 
 
-def drawPreview(color_texture_left, color_texture_right, scale):
-    if not scale:
-        return
-
+def drawPreview(color_texture_left, color_texture_right):
     act_tex = Buffer(GL_INT, 1)
     glGetIntegerv(GL_TEXTURE_2D, act_tex)
-
-    if scale != 100:
-        viewport = Buffer(GL_INT, 4)
-        glGetIntegerv(GL_VIEWPORT, viewport)
-
-        width = int(scale * 0.01 * viewport[2])
-        height = int(scale * 0.01 * viewport[3])
-
-        glViewport(viewport[0], viewport[1], width, height)
-        glScissor(viewport[0], viewport[1], width, height)
 
     glDisable(GL_DEPTH_TEST)
 
@@ -133,115 +242,6 @@ def drawPreview(color_texture_left, color_texture_right, scale):
     glDisable(GL_TEXTURE_2D)
 
     view_reset()
-
-    if scale != 100:
-        glViewport(viewport[0], viewport[1], viewport[2], viewport[3])
-        glScissor(viewport[0], viewport[1], viewport[2], viewport[3])
-
-
-class Logger:
-    def error(self, message, is_fatal):
-        print(message)
-
-        if is_fatal:
-            logic.endGame()
-
-    @staticmethod
-    def log_traceback(err):
-        raise err
-        print(err)
-        logic.endGame()
-
-
-class HMD:
-    def __init__(self, backend):
-        self._hmd = None
-        self._backend = backend
-        self.logger = Logger()
-        self._checkLibraryPath()
-
-    def _checkLibraryPath(self):
-        """if library exists append it to sys.path"""
-        import sys
-        import os
-
-        libs_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'libs')
-        oculus_path = os.path.join(libs_path, "hmd_sdk_bridge")
-
-        if oculus_path not in sys.path:
-            sys.path.append(oculus_path)
-
-    def _getHMDClass(self):
-        if self._backend == 'oculus_latest':
-            return BridgeOculus
-
-        elif self._backend == 'oculus_legacy':
-            return BridgeOculusLegacy
-
-        else:
-            self.logger.error('Oculus backend \"{0}\" not supported'.format(self._backend))
-            return None
-
-    def _checkOculus(self):
-        """
-        check if Oculus is connected
-        """
-        # TODO check is oculus is connected
-        return True
-
-    def start(self):
-        from bge import logic
-
-        try:
-            scene = logic.getCurrentScene()
-
-            self._hmd = self._getHMDClass()(scene, self.logger.error)
-
-            if not self._hmd.init():
-                self.logger.error("Error initializing device", True)
-                return False
-
-        except Exception as E:
-            self.logger.log_traceback(E)
-            self._hmd = None
-            return False
-
-        else:
-            return True
-
-    def loop(self):
-        from bge import texture
-        from bge import logic
-
-        self._hmd.loop()
-
-        scene = logic.getCurrentScene()
-        camera = scene.objects.get('Camera.VR')
-
-        modelview_matrix_original = camera.modelview_matrix
-        projection_matrix_original = camera.projection_matrix
-
-        for i in range(2):
-            self._hmd.setEye(i)
-
-            offscreen = self._hmd.offscreen
-            projection_matrix = self._hmd.projection_matrix
-            modelview_matrix = self._hmd.modelview_matrix
-
-            self._setMatrices(camera, projection_matrix, modelview_matrix)
-
-            # drawing
-            self._hmd.image_render.refresh(self._hmd.texture_buffer)
-
-        #self._hmd.frameReady()
-        self._setMatrices(camera, projection_matrix_original, modelview_matrix_original)
-
-    def _setMatrices(self, camera, projection_matrix, modelview_matrix):
-        camera.projection_matrix = projection_matrix
-
-        modelview_matrix.invert()
-        camera.worldPosition = modelview_matrix.translation
-        camera.worldOrientation = modelview_matrix.to_quaternion()
 
 
 # #####################################
@@ -354,9 +354,20 @@ class HMD_Base:
                 image_render = texture.ImageRender(scene, camera, offscreen)
                 image_render.alpha = True
                 self._offscreen[i] = offscreen
-                self._image_render[i] = image_render
-                self._color_texture[i] = offscreen.color
-                self._texture_buffer[i] = bytearray(offscreen.width * offscreen.height * 4)
+
+
+                if DEBUG:
+                    wall = scene.objects['Plane.002']
+                    mat = texture.materialID(wall, 'MAMaterial.002')
+                    dynamic_texture = texture.Texture(wall, mat) 
+                    dynamic_texture.source = image_render
+                    self._image_render[i] = dynamic_texture
+                    self._color_texture[i] = dynamic_texture.bindId
+                    self._texture_buffer[i] = True
+                else:
+                    self._image_render[i] = image_render
+                    self._color_texture[i] = offscreen.color
+                    self._texture_buffer[i] = bytearray(offscreen.width * offscreen.height * 4)
 
                 print(self._width[i], self._height[i], self._offscreen[i].color)
 
@@ -412,7 +423,7 @@ class HMD_Base:
         Handle error messages
         """
         if VERBOSE:
-            print("ADD-ON :: {0}() : {1}".format(function, exception))
+            print("HMD_SDK_BRIDGE :: {0}() : {1}".format(function, exception))
             import sys
             traceback = sys.exc_info()
 
