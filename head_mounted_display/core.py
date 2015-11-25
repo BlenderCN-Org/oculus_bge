@@ -30,25 +30,27 @@ def init():
     if not hmd.start():
         return logic.endGame()
 
-    logic.globalDict['hmd'] = hmd
+    """
+    waiting for the following fix to use logic.globalDict instead of globals
+    https://developer.blender.org/T46870
+    """
+    logic.hmd = hmd
 
 
 def loop():
     """
     called from logic brick
     """
-    hmd = logic.globalDict.get('hmd')
-    if hmd:
-        hmd.loop()
+    if hasattr(logic, 'hmd'):
+        logic.hmd.loop()
 
 
 def recenter():
     """
     called from logic brick
     """
-    hmd = logic.globalDict.get('hmd')
-    if hmd:
-        hmd.reCenter()
+    if hasattr(logic, 'hmd'):
+        logic.hmd.reCenter()
 
 
 # #####################################
@@ -76,6 +78,9 @@ class HMD:
         self._mirror = mirror
         self.logger = Logger()
         self._checkLibraryPath()
+
+    def __del__(self):
+        self._hmd.quit()
 
     @property
     def use_mirror(self):
