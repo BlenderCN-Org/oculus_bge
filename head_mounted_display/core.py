@@ -146,7 +146,7 @@ class HMD:
             sys.path.append(oculus_path)
 
     def _getHMDClass(self):
-        if self._backend == 'oculus_latest':
+        if self._backend == 'oculus':
             return BridgeOculus
 
         elif self._backend == 'oculus_legacy':
