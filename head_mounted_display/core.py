@@ -4,8 +4,6 @@ from bgl import *
 
 
 VERBOSE = True
-DEBUG = True
-
 
 def init():
     """
@@ -360,19 +358,9 @@ class HMD_Base:
                 image_render.alpha = True
                 self._offscreen[i] = offscreen
 
-
-                if DEBUG:
-                    wall = scene.objects['Plane.002']
-                    mat = texture.materialID(wall, 'MAMaterial.002')
-                    dynamic_texture = texture.Texture(wall, mat) 
-                    dynamic_texture.source = image_render
-                    self._image_render[i] = dynamic_texture
-                    self._color_texture[i] = dynamic_texture.bindId
-                    self._texture_buffer[i] = True
-                else:
-                    self._image_render[i] = image_render
-                    self._color_texture[i] = offscreen.color
-                    self._texture_buffer[i] = bytearray(offscreen.width * offscreen.height * 4)
+                self._image_render[i] = image_render
+                self._color_texture[i] = offscreen.color
+                self._texture_buffer[i] = bytearray(offscreen.width * offscreen.height * 4)
 
                 print(self._width[i], self._height[i], self._offscreen[i].color)
 
