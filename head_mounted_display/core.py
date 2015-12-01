@@ -21,9 +21,8 @@ def init():
         return logic.endGame()
 
     backend = camera['backend']
-    mirror = camera['mirror']
 
-    hmd = HMD(backend, mirror)
+    hmd = HMD(backend)
 
     if not hmd.start():
         return logic.endGame()
@@ -43,12 +42,26 @@ def loop():
         logic.hmd.loop()
 
 
-def recenter():
+def recenter(cont):
     """
     called from logic brick
     """
+    if not cont.sensors[0].positive:
+        return
+
     if hasattr(logic, 'hmd'):
         logic.hmd.reCenter()
+
+
+def mirror(cont):
+    """
+    called from logic brick
+    """
+    if not cont.sensors[0].positive:
+        return
+
+    if hasattr(logic, 'hmd'):
+        logic.hmd.mirror()
 
 
 # #####################################
@@ -70,10 +83,10 @@ class Logger:
 
 
 class HMD:
-    def __init__(self, backend, mirror):
+    def __init__(self, backend):
         self._hmd = None
         self._backend = backend
-        self._mirror = mirror
+        self._mirror = False
         self.logger = Logger()
         self._checkLibraryPath()
 
@@ -83,6 +96,11 @@ class HMD:
     @property
     def use_mirror(self):
         return self._mirror and self._hmd.is_direct_mode
+
+    def mirror(self):
+        self._mirror = not self._mirror
+        scene = logic.getCurrentScene()
+        self._setupMirror(scene)
 
     def reCenter(self):
         return self._hmd.reCenter()
@@ -102,14 +120,7 @@ class HMD:
             return False
 
         else:
-            if self.use_mirror:
-                if self._drawMirror not in scene.post_draw:
-                    scene.post_draw.append(self._drawMirror)
-
-                logic.setRender(True)
-            else:
-                logic.setRender(False)
-
+            self._setupMirror(scene)
             return True
 
     def loop(self):
@@ -131,6 +142,15 @@ class HMD:
             self._hmd.image_render.refresh(self._hmd.texture_buffer)
 
         self._hmd.frameReady()
+
+    def _setupMirror(self, scene):
+        if self.use_mirror:
+            if self._drawMirror not in scene.post_draw:
+                scene.post_draw.append(self._drawMirror)
+
+            logic.setRender(True)
+        else:
+            logic.setRender(False)
 
     def _drawMirror(self):
         texture_a = self._hmd._color_texture[0]
