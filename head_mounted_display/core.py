@@ -139,7 +139,7 @@ class HMD:
             self._setMatrices(camera, projection_matrix, modelview_matrix)
 
             # drawing
-            self._hmd.image_render.refresh(self._hmd.texture_buffer)
+            self._hmd.image_render.refresh()
 
         self._hmd.frameReady()
 
@@ -284,7 +284,6 @@ class HMD_Base:
         "_is_direct_mode",
         "_eye_pose",
         "_offscreen",
-        "_texture_buffer",
         "_image_render",
         "_color_texture",
         "_modelview_matrix",
@@ -303,7 +302,6 @@ class HMD_Base:
         self._modelview_matrix = [Matrix.Identity(4), Matrix.Identity(4)]
         self._color_texture = [0, 0]
         self._offscreen = [None, None]
-        self._texture_buffer = [None, None]
         self._image_render = [None, None]
         self._eye_orientation_raw = [[1.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]]
         self._eye_position_raw = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
@@ -334,10 +332,6 @@ class HMD_Base:
     @property
     def offscreen(self):
         return self._offscreen[self._current_eye]
-
-    @property
-    def texture_buffer(self):
-        return self._texture_buffer[self._current_eye]
 
     @property
     def image_render(self):
@@ -380,7 +374,6 @@ class HMD_Base:
 
                 self._image_render[i] = image_render
                 self._color_texture[i] = offscreen.color
-                self._texture_buffer[i] = bytearray(offscreen.width * offscreen.height * 4)
 
                 print(self._width[i], self._height[i], self._offscreen[i].color)
 
@@ -391,7 +384,6 @@ class HMD_Base:
                 self._offscreen[i] = None
                 self._image_render[i] = None
                 self._color_texture[i] = 0
-                self._texture_buffer[i] = None
 
             return False
 

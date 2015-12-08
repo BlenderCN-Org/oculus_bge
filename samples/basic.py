@@ -22,19 +22,17 @@ def init():
     color_texture = offscreen.color
     image_render = texture.ImageRender(scene, camera, offscreen)
     image_render.alpha = True
-    texture_buffer = bytearray(offscreen.width * offscreen.height * 4)
 
     logic.globalDict['offscreen'] = offscreen
     logic.globalDict['color_texture'] = color_texture
     logic.globalDict['image_render'] = image_render
-    logic.globalDict['texture_buffer'] = texture_buffer
 
 
 def loop():
     """
     update offscreen buffer
     """
-    logic.globalDict['image_render'].refresh(logic.globalDict['texture_buffer'])
+    logic.globalDict['image_render'].refresh()
 
 
 def draw():
