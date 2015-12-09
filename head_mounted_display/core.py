@@ -30,6 +30,8 @@ def init():
     """
     waiting for the following fix to use logic.globalDict instead of globals
     https://developer.blender.org/T46870
+
+    (this is fixed, but it has not been merged in decklink yet)
     """
     logic.hmd = hmd
 
