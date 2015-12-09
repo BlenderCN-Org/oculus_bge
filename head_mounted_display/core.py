@@ -122,6 +122,7 @@ class HMD:
             return False
 
         else:
+            self._setupGame()
             self._setupMirror(scene)
             return True
 
@@ -144,6 +145,19 @@ class HMD:
             self._hmd.image_render.refresh()
 
         self._hmd.frameReady()
+
+    def _setupGame(self):
+        """
+        general game settings
+        """
+        # required when logic takes most of the time
+        logic.setMaxLogicFrame(1)
+
+        # make sure we use the correct frame rate
+        logic.setLogicTicRate(75)
+
+        # redundant call since the SDK should also handle this
+        render.setVsync(False)
 
     def _setupMirror(self, scene):
         if self.use_mirror:
